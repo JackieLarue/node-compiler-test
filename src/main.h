@@ -1,10 +1,11 @@
 #pragma once
 
+#include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>
-#include <stdbool.h>
 #include <string.h>
+
 #include "./clay/clay.h"
 #include "./clay/clay_renderer_raylib.h"
 #include "raylib.h"
@@ -58,16 +59,16 @@ typedef enum BuiltinDataType {
     SETTINGS,
     REPETITION,
     ANY,
-    NONE    
+    NONE
 } BuiltinDataType;
 
 typedef enum SocketType {
-    OUTGOING_NAMED,  // = 0b000,
-    INCOMING_NAMED,  // = 0b001,
+    OUTGOING_NAMED, // = 0b000,
+    INCOMING_NAMED, // = 0b001,
     INCOMING_NUMBER, // = 0b010,
     INCOMING_SELECT, // = 0b011,
     INCOMING_SWITCH, // = 0b100,
-    INCOMING_TEXT    // = 0b101
+    INCOMING_TEXT // = 0b101
 } SocketType;
 
 typedef struct Position16 {
@@ -114,7 +115,7 @@ typedef struct Socket {
     uint8_t port_slot;
 
     NodeAndSocket connection;
-    
+
     U32String value;
 } Socket;
 
@@ -125,7 +126,7 @@ typedef struct InstanceEntry {
     Position16 pos;
     uint8_t name_len; //technically 6 bits, not 8
     uint8_t sock_len; //ditto
-    
+
     char* name;
     Socket* sockets;
 } InstanceEntry;
@@ -133,13 +134,13 @@ typedef struct InstanceEntry {
 typedef struct NodeInstances {
     uint8_t instance_count;
     InstanceEntry* instance_table;
-} NodeInstances; 
+} NodeInstances;
 
 typedef struct Node {
     //format version of this node
     uint8_t version;
 
-    //inout positions and out connections    
+    //inout positions and out connections
     NodeRoots root;
 
     //the ids of all nodes this node refers to
@@ -147,7 +148,7 @@ typedef struct Node {
 
     //the list of non-reserved types this nodes uses
     NodeTypes type;
-    
+
     //the list of node instances this node contains
     NodeInstances instance;
 } Node;
@@ -159,26 +160,30 @@ int errorMessage(FILE* src, char* err_msg);
 
 //GUI Time
 
-typedef struct {
-    Clay_String title;
-    Clay_String contents;
-} Document;
+typedef struct SocketGUI {
+    char* name;
+    Socket socket;
+    //SocketDefault?
+    //Additional?
+    bool connective;
+} SocketGUI;
 
-typedef struct {
-    Document *documents;
-    uint32_t length;
-} DocumentArray;
+typedef struct TableSocketGUI {
+    size_t len;
+    SocketGUI* tbl;
+} TableSocketGUI;
 
-extern DocumentArray documents;
-extern uint32_t selectedDocumentIndex;
+typedef struct NodeGUI {
+    char name[31]; //size of name for now is guranteed to be 30 characters max, + 1 for null termination
+    Vector2 position;
+    TableSocketGUI sockets;
+    Color color;
+    uint8_t type_index;
+    uint8_t key;
+} NodeGUI;
 
-void RenderHeaderButton(Clay_String text);
-void RenderDropdownMenuItem(Clay_String text);
-void HandleSidebarInteraction(Clay_ElementId elementId, Clay_PointerData pointerData, intptr_t userData);
+
 void HandleClayErrors(Clay_ErrorData errorData);
 
 int initializeRenderer();
 void updateRenderer();
-
-extern const int FONT_ID_BODY_16;
-extern Clay_Color COLOR_WHITE;

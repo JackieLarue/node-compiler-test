@@ -92,6 +92,7 @@ int parseInstances(FILE* src, NodeInstances* inst) {
         if (fread(key_type_flags, 1, 6, src) != 6) {
             return errorMessage(src, "Failed to read instance key or type or flags.\n");
         }
+        // clang-format off
         inst->instance_table[i].key  = key_type_flags[0];
         inst->instance_table[i].type = key_type_flags[1];
 
@@ -100,6 +101,7 @@ int parseInstances(FILE* src, NodeInstances* inst) {
 
         inst->instance_table[i].name_len = (key_type_flags[4] & 0b00001111) <<2 | ((key_type_flags[5] >>(8-2)) & 0b00000011);
         inst->instance_table[i].sock_len =  key_type_flags[5] & 0b00111111;
+        // clang-format on
 
         inst->instance_table[i].name = malloc(inst->instance_table[i].name_len + 1); //+1 for null termination
         if (inst->instance_table[i].name == NULL) {
@@ -119,17 +121,21 @@ int parseInstances(FILE* src, NodeInstances* inst) {
             if (fread(&socket_flags, sizeof(socket_flags), 1, src) != 1) {
                 return errorMessage(src, "Failed to read instance socket flags.\n");
             }
+            // clang-format off
             inst->instance_table[i].sockets[j].type = (SocketType)(socket_flags >> 3 & 0b111);
-            inst->instance_table[i].sockets[j].is_connected =  (socket_flags & 0b00000010) != 0;
+            inst->instance_table[i].sockets[j].is_connected  = (socket_flags & 0b00000010) != 0;
             inst->instance_table[i].sockets[j].is_repetitive = (socket_flags & 0b00000100) != 0;
-            inst->instance_table[i].sockets[j].switch_value =  (socket_flags & 0b00000001) != 0;
+            inst->instance_table[i].sockets[j].switch_value  = (socket_flags & 0b00000001) != 0;
+            // clang-format on
 
             uint8_t type_port[2] = { 0 };
             if (fread(type_port, sizeof(type_port), 1, src) != 1) {
                 return errorMessage(src, "Failed to read socket type index or socket port slot\n");
             }
+            // clang-format off
             inst->instance_table[i].sockets[j].type_index = type_port[0];
             inst->instance_table[i].sockets[j].port_slot  = type_port[1];
+            // clang-format on
 
             if (inst->instance_table[i].sockets[j].type != OUTGOING_NAMED) {
                 if (inst->instance_table[i].sockets[j].is_connected) {
@@ -144,10 +150,12 @@ int parseInstances(FILE* src, NodeInstances* inst) {
                     if (fread(&len_be, sizeof(uint32_t), 1, src) != 1) {
                         return errorMessage(src, "Failed to read instance socket value length\n");
                     }
+                    // clang-format off
                     uint32_t len = ((len_be>>24) & 0x000000ff) | // move byte 3 to byte 0
                                    ((len_be<<8 ) & 0x00ff0000) | // move byte 1 to byte 2
                                    ((len_be>>8 ) & 0x0000ff00) | // move byte 2 to byte 1
                                    ((len_be<<24) & 0xff000000); // byte 0 to byte 3
+                    // clang-format on
                     inst->instance_table[i].sockets[j].value.len = len;
                     
                     inst->instance_table[i].sockets[j].value.str = malloc(inst->instance_table[i].sockets[j].value.len + 1); //+1 for blah blah you get it already
@@ -172,8 +180,8 @@ int parseInstances(FILE* src, NodeInstances* inst) {
 }
 
 int parseNode(FILE* src, Node* dest) {
-    char magic[11] = { 0 };
-    if (fread(magic, 11, 1, src) != 1) {
+    char magic[sizeof(magic_constant)] = { 0 };
+    if (fread(magic, sizeof(char), sizeof(magic), src) != sizeof(magic)) {
         return errorMessage(src, "Failed to read magic.\n");
     }
 
@@ -195,12 +203,14 @@ int parseNode(FILE* src, Node* dest) {
     if (fread(&pos, 1, 6, src) != 6) {
         return errorMessage(src, "Failed to read node root pos.\n");
     }
+    // clang-format off
     dest->root.in_pos.x  = ((uint16_t)(pos[0]             ) <<2 | (uint16_t)((pos[1]>>6) & 0b00000011));
     dest->root.in_pos.y  = ((uint16_t)(pos[1] & 0b00111111) <<4 | (uint16_t)((pos[2]>>4) & 0b00001111));
     dest->root.out_pos.x = ((uint16_t)(pos[2] & 0b00001111) <<6 | (uint16_t)((pos[3]>>2) & 0b00111111));
     dest->root.out_pos.y = ((uint16_t)(pos[3] & 0b00000011) <<8 | (uint16_t)( pos[4]                 ));
+    // clang-format on
     dest->root.num_connections = pos[5];
-    
+
     dest->root.connections = malloc(dest->root.num_connections * NODE_SOCKET_SIZE);
     if (dest->root.connections == NULL) {
         return errorMessage(src, "Failed to allocate root connections.\n");

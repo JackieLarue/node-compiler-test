@@ -27,12 +27,12 @@ target_sources(${PROJECT_NAME} PUBLIC ${PROJECT_SOURCES})
 target_include_directories(${PROJECT_NAME} PUBLIC ${PROJECT_INCLUDE})
 target_link_libraries(${PROJECT_NAME} PUBLIC raylib)
 #set(CMAKE_CXX_FLAGS "-lm raylib")
-set(CMAKE_CXX_FLAGS_DEBUG "-Wall -Werror -Wextra")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+set(CMAKE_C_FLAGS_DEBUG "-Wall -Werror -Wextra -Wno-error=sign-compare -Wno-error=missing-braces -std=gnu99")
+set(CMAKE_C_FLAGS_RELEASE "-O3 -std=gnu99")
 
 # Setting ASSETS_PATH
 #target_compile_definitions(${PROJECT_NAME} PUBLIC ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/") # Set the asset path macro to the absolute path on the dev machine
-target_compile_definitions(${PROJECT_NAME} PUBLIC ASSETS_PATH="./assets") # Set the asset path macro in release mode to a relative path that assumes the assets folder is in the same directory as the game executable
+add_compile_definitions(ASSETS_PATH="./assets") # Set the asset path macro in release mode to a relative path that assumes the assets folder is in the same directory as the game executable
 add_custom_command(
         TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory

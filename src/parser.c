@@ -4,22 +4,27 @@
 #define NODE_SOCKET_SIZE 2
 char magic_constant[11] = "kronarknode";
 
+typedef enum err_msg_enum {
+    no_err,
+    err
+} err_msg_enum;
+
 int errorMessage(FILE* src, char* err_msg) {
     fprintf(stderr, "%s", err_msg);
     fclose(src);
-    return 1;
+    return err;
 }
 
 int indexErrorMessage(FILE* src, char* err_msg, size_t index) {
     fprintf(stderr, "%s at index %zu\n", err_msg, index);
     fclose(src);
-    return 1;
+    return err;
 }
 
 int nestedIndexErrorMessage(FILE* src, char* err_msg, size_t index_1, size_t index_2) {
     fprintf(stderr, "%s at index %zu subindex %zu\n", err_msg, index_1, index_2);
     fclose(src);
-    return 1;
+    return err;
 }
 
 int stringArrayErrorMessage(FILE* src, char* err_msg, char** str_arr, size_t index_err) {
@@ -70,62 +75,62 @@ int parseNameTable(FILE* src, StringTable* str_tbl) {
                 return stringArrayErrorMessage(src, "Failed to read string", node_names, i);
             }
             node_names[i][str_length] = '\0'; //null terminate the damn thing
-            strcpy(str_tbl->table[i].str, node_names[i]);
+            strcpy_s(str_tbl->table[i].str, str_length + 1, node_names[i]);
         }
     }
-    return 0;    
+    return no_err;    
 }
 
-int parseInstances(FILE* src, NodeInstances* inst) {
+int parseInstances(FILE* src, InstanceTable* inst) {
     uint8_t inst_count;
     if (fread(&inst_count, 1, 1, src) != 1) {
         return errorMessage(src, "Failed to read instance count.\n");
     }
-    inst->instance_count = inst_count;
+    inst->len = inst_count;
     
-    inst->instance_table = malloc(inst->instance_count * sizeof(NodeInstances));
-    if (inst->instance_table == NULL) {
+    inst->table = malloc(inst->len * sizeof(InstanceTable));
+    if (inst->table == NULL) {
         return errorMessage(src, "Failed to allocate instance table.\n");
     }
-    for (size_t i = 0; i < inst->instance_count; i++) {
+    for (size_t i = 0; i < inst->len; i++) {
         uint8_t key_type_flags[6] = { 0 };
         if (fread(key_type_flags, 1, 6, src) != 6) {
             return errorMessage(src, "Failed to read instance key or type or flags.\n");
         }
         // clang-format off
-        inst->instance_table[i].key  = key_type_flags[0];
-        inst->instance_table[i].type = key_type_flags[1];
+        inst->table[i].key  = key_type_flags[0];
+        inst->table[i].type = key_type_flags[1];
 
- 		inst->instance_table[i].pos.x = ((uint16_t)(key_type_flags[2]             ) <<2 | (uint16_t)((key_type_flags[2] >>(8-2)) & 0b00000011));
- 		inst->instance_table[i].pos.y = ((uint16_t)(key_type_flags[3] & 0b00111111) <<4 | (uint16_t)((key_type_flags[3] >>(8-4)) & 0b00001111));
+ 		inst->table[i].pos.x = (int16_t)((uint16_t)(key_type_flags[2]             ) <<2 | (uint16_t)((key_type_flags[2] >>(8-2)) & 0b00000011)) - 500;
+ 		inst->table[i].pos.y = (int16_t)((uint16_t)(key_type_flags[3] & 0b00111111) <<4 | (uint16_t)((key_type_flags[3] >>(8-4)) & 0b00001111)) - 500;
 
-        inst->instance_table[i].name_len = (key_type_flags[4] & 0b00001111) <<2 | ((key_type_flags[5] >>(8-2)) & 0b00000011);
-        inst->instance_table[i].sock_len =  key_type_flags[5] & 0b00111111;
+        inst->table[i].name.len        = (key_type_flags[4] & 0b00001111) <<2 | ((key_type_flags[5] >>(8-2)) & 0b00000011);
+        inst->table[i].socket.len      =  key_type_flags[5] & 0b00111111;
         // clang-format on
 
-        inst->instance_table[i].name = malloc(inst->instance_table[i].name_len + 1); //+1 for null termination
-        if (inst->instance_table[i].name == NULL) {
+        inst->table[i].name.str = malloc(inst->table[i].name.len + 1); //+1 for null termination
+        if (inst->table[i].name.str == NULL) {
             return indexErrorMessage(src, "Failed to allocate instance name string", i);
         }
-        if (fread(inst->instance_table[i].name, 1, inst->instance_table[i].name_len, src) != inst->instance_table[i].name_len) {
+        if (fread(inst->table[i].name.str, 1, inst->table[i].name.len, src) != inst->table[i].name.len) {
             return indexErrorMessage(src, "Failed to read instance name string", i);
         }
-        inst->instance_table[i].name[inst->instance_table[i].name_len] = '\0'; //null terminate the damn thing (x2!)
+        inst->table[i].name.str[inst->table[i].name.len] = '\0'; //null terminate the damn thing (x2!)
 
-        inst->instance_table[i].sockets = malloc(inst->instance_table[i].sock_len * sizeof(Socket));
-        if (inst->instance_table[i].sockets == NULL) {
+        inst->table[i].socket.table = malloc(inst->table[i].socket.len * sizeof(Socket));
+        if (inst->table[i].socket.table == NULL) {
             return indexErrorMessage(src, "Failed to allocate instance socket", i);
         }
-        for (size_t j = 0; j < inst->instance_table[i].sock_len; j++) {
+        for (size_t j = 0; j < inst->table[i].socket.len; j++) {
             uint8_t socket_flags;
             if (fread(&socket_flags, sizeof(socket_flags), 1, src) != 1) {
                 return errorMessage(src, "Failed to read instance socket flags.\n");
             }
             // clang-format off
-            inst->instance_table[i].sockets[j].type = (SocketType)(socket_flags >> 3 & 0b111);
-            inst->instance_table[i].sockets[j].is_connected  = (socket_flags & 0b00000010) != 0;
-            inst->instance_table[i].sockets[j].is_repetitive = (socket_flags & 0b00000100) != 0;
-            inst->instance_table[i].sockets[j].switch_value  = (socket_flags & 0b00000001) != 0;
+            inst->table[i].socket.table[j].type = (SocketType)(socket_flags >> 3 & 0b111);
+            inst->table[i].socket.table[j].is_connected  = (socket_flags & 0b00000010) != 0;
+            inst->table[i].socket.table[j].is_repetitive = (socket_flags & 0b00000100) != 0;
+            inst->table[i].socket.table[j].switch_value  = (socket_flags & 0b00000001) != 0;
             // clang-format on
 
             uint8_t type_port[2] = { 0 };
@@ -133,19 +138,19 @@ int parseInstances(FILE* src, NodeInstances* inst) {
                 return errorMessage(src, "Failed to read socket type index or socket port slot\n");
             }
             // clang-format off
-            inst->instance_table[i].sockets[j].type_index = type_port[0];
-            inst->instance_table[i].sockets[j].port_slot  = type_port[1];
+            inst->table[i].socket.table[j].type_index = type_port[0];
+            inst->table[i].socket.table[j].port_slot  = type_port[1];
             // clang-format on
 
-            if (inst->instance_table[i].sockets[j].type != OUTGOING_NAMED) {
-                if (inst->instance_table[i].sockets[j].is_connected) {
-                    NodeAndSocket ns;
-                    if (fread(&ns, sizeof(NodeAndSocket), 1, src) != 1) {
-                        return errorMessage(src, "Failed to read instance socket incoming node and socket\n");
+            if (inst->table[i].socket.table[j].type != OUTGOING_NAMED) {
+                if (inst->table[i].socket.table[j].is_connected) {
+                    Connection cn;
+                    if (fread(&cn, sizeof(Connection), 1, src) != 1) {
+                        return errorMessage(src, "Failed to read instance socket incoming connection\n");
                     }
-                    inst->instance_table[i].sockets[j].connection = ns;
+                    inst->table[i].socket.table[j].connection = cn;
                 }
-                else if (inst->instance_table[i].sockets[j].type != INCOMING_SWITCH) {
+                else if (inst->table[i].socket.table[j].type != INCOMING_SWITCH) {
                     uint32_t len_be;
                     if (fread(&len_be, sizeof(uint32_t), 1, src) != 1) {
                         return errorMessage(src, "Failed to read instance socket value length\n");
@@ -156,27 +161,27 @@ int parseInstances(FILE* src, NodeInstances* inst) {
                                    ((len_be>>8 ) & 0x0000ff00) | // move byte 2 to byte 1
                                    ((len_be<<24) & 0xff000000); // byte 0 to byte 3
                     // clang-format on
-                    inst->instance_table[i].sockets[j].value.len = len;
+                    inst->table[i].socket.table[j].value.len = len;
                     
-                    inst->instance_table[i].sockets[j].value.str = malloc(inst->instance_table[i].sockets[j].value.len + 1); //+1 for blah blah you get it already
-                    if (inst->instance_table[i].sockets[j].value.str == NULL) {
+                    inst->table[i].socket.table[j].value.str = malloc(inst->table[i].socket.table[j].value.len + 1); //+1 for blah blah you get it already
+                    if (inst->table[i].socket.table[j].value.str == NULL) {
                         return nestedIndexErrorMessage(src, "Failed to allocate instance socket value string", i, j);
                     }
-                    size_t fread_value = fread(inst->instance_table[i].sockets[j].value.str, 1, len, src);
+                    size_t fread_value = fread(inst->table[i].socket.table[j].value.str, 1, len, src);
                     if (fread_value != len) {
-                        //inst->instance_table[i].sockets[j].value.str[len] = '\0';
-                        //printf("%s\n", inst->instance_table[i].sockets[j].value.str);
+                        //inst->table[i].socket.table[j].value.str[len] = '\0';
+                        //printf("%s\n", inst->table[i].socket.table[j].value.str);
                         //printf("Fread elements returned, len value: %zu, %u\n", fread_value, len);
                         return nestedIndexErrorMessage(src, "Failed to read instance socket value string", i, j);
                     }
                     
-                    inst->instance_table[i].sockets[j].value.str[len] = '\0';
+                    inst->table[i].socket.table[j].value.str[len] = '\0';
                 }
             }
         }
     }
 
-    return 0;
+    return no_err;
 }
 
 int parseNode(FILE* src, Node* dest) {
@@ -204,10 +209,10 @@ int parseNode(FILE* src, Node* dest) {
         return errorMessage(src, "Failed to read node root pos.\n");
     }
     // clang-format off
-    dest->root.in_pos.x  = ((uint16_t)(pos[0]             ) <<2 | (uint16_t)((pos[1]>>6) & 0b00000011));
-    dest->root.in_pos.y  = ((uint16_t)(pos[1] & 0b00111111) <<4 | (uint16_t)((pos[2]>>4) & 0b00001111));
-    dest->root.out_pos.x = ((uint16_t)(pos[2] & 0b00001111) <<6 | (uint16_t)((pos[3]>>2) & 0b00111111));
-    dest->root.out_pos.y = ((uint16_t)(pos[3] & 0b00000011) <<8 | (uint16_t)( pos[4]                 ));
+    dest->root.in_pos.x  = (int16_t)((uint16_t)(pos[0]             ) <<2 | (uint16_t)((pos[1]>>6) & 0b00000011)) - 500;
+    dest->root.in_pos.y  = (int16_t)((uint16_t)(pos[1] & 0b00111111) <<4 | (uint16_t)((pos[2]>>4) & 0b00001111)) - 500;
+    dest->root.out_pos.x = (int16_t)((uint16_t)(pos[2] & 0b00001111) <<6 | (uint16_t)((pos[3]>>2) & 0b00111111)) - 500;
+    dest->root.out_pos.y = (int16_t)((uint16_t)(pos[3] & 0b00000011) <<8 | (uint16_t)( pos[4]                 )) - 500;
     // clang-format on
     dest->root.num_connections = pos[5];
 
@@ -219,39 +224,56 @@ int parseNode(FILE* src, Node* dest) {
         return errorMessage(src, "Failed to read root connections.\n");
     }
 
-    if (parseNameTable(src, &dest->id) == 1) {
-        return 1;
-    }
-    if (parseNameTable(src, &dest->type) == 1) {
-        return 1;
-    }
-
-    if (parseInstances(src, &dest->instance) == 1) {
-        return 1;
-    }
-
-    return 0;
+    return parseNameTable(src, &dest->id) == err || 
+           parseNameTable(src, &dest->type) == err || 
+           parseInstances(src, &dest->instance) == err;
 }
 
 //opens nodefile, pass in path and returns node pointer + whether it succeceded
 int openNodeFile(char* path, Node* node) {
-    FILE* nodeFile = fopen(path, "rb");
-    if (nodeFile == NULL) {
-        errorMessage(nodeFile, "\nFailed to open node file.");
-        return 1;
+    FILE** nodeFile = NULL;
+    if (fopen_s(nodeFile, path, "rb")) {
+        errorMessage(*nodeFile, "\nFailed to open node file.");
+        return err;
     }
-    if (parseNode(nodeFile, node) == 1) {
+    if (parseNode(*nodeFile, node) == 1) {
         fprintf(stderr, "\nWhoops, an error occured parsing the node."); //since 
-        return 1;
+        return err;
     }
-    fclose(nodeFile);
-    return 0;
+    fclose(*nodeFile);
+    return no_err;
+}
+
+void free_string_table(StringTable* tbl) {
+    for (uint8_t i = 0; i < tbl->table_size; i++) {
+        free(tbl->table[i].str);
+    }
+    free(tbl->table);
+}
+
+void free_instance_table(InstanceTable* inst) {
+    for (uint8_t i = 0; i < inst->len; i++) {
+        free(inst->table[i].name.str);
+        for (uint8_t j = 0; j < inst->table[i].socket.len; j++) {
+            free(inst->table[i].socket.table[j].value.str);
+        }
+        free(inst->table[i].socket.table);
+    }
+    free(inst->table);    
+}
+
+void free_node(Node* node) {
+    free(node->root.connections);
+    free_string_table(&node->id);
+    free_string_table(&node->type);
+    free_instance_table(&node->instance);
+    free(node);
 }
 
 void printNode(Node* node) {
     printf("Node Version: %d\n", node->version);
-    printf("Input Root \n\tX: %u \n\tY: %u\n", node->root.in_pos.x, node->root.in_pos.y); //should be 432 and 508 
-    printf("Output Root \n\tX: %u \n\tY: %u\n", node->root.out_pos.x, node->root.out_pos.y); // should be 560 and 494
+    printf("Input Root \n\tX: %d \n\tY: %d\n", node->root.in_pos.x, node->root.in_pos.y); 
+    printf("Output Root \n\tX: %d \n\tY: %d\n", node->root.out_pos.x, node->root.out_pos.y);
     printf("Output Root Connections (Amount: %u):\n", node->root.num_connections);
     for (size_t i = 0; i < node->root.num_connections; i++) {
         printf("\tIndex %zu: \n\t\tNode ID: %u \n\t\tSocket ID: %u\n", i, node->root.connections[i].node, node->root.connections[i].socket);
@@ -264,10 +286,10 @@ void printNode(Node* node) {
     for (size_t j = 0; j < node->type.table_size; j++) {
         printf("\t%s\n", node->type.table[j].str);
     }
-    printf("Node Instances (Amount: %u):\n", node->instance.instance_count);
-    for (size_t i = 0; i < node->instance.instance_count; i++) {
-        printf("\tNode Instance %zu: %s\n", i, node->instance.instance_table[i].name);
-        printf("\t\tInstance Key: %u\n\t\tInstance Type: %u\n", node->instance.instance_table[i].key, node->instance.instance_table[i].type);
-        printf("\t\tInstance Position: \n\t\t\tX: %u \n\t\t\tY: %u\n", node->instance.instance_table[i].pos.x, node->instance.instance_table[i].pos.y);
+    printf("Node Instances (Amount: %u):\n", node->instance.len);
+    for (size_t i = 0; i < node->instance.len; i++) {
+        printf("\tNode Instance %zu: %s\n", i, node->instance.table[i].name.str);
+        printf("\t\tInstance Key: %u\n\t\tInstance Type: %u\n", node->instance.table[i].key, node->instance.table[i].type);
+        printf("\t\tInstance Position: \n\t\t\tX: %d \n\t\t\tY: %d\n", node->instance.table[i].pos.x, node->instance.table[i].pos.y);
     }
 }
